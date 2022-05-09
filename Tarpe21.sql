@@ -1265,3 +1265,205 @@ insert into EmployeeCityFirstName values(4, 'John', 'Menco', 3220, 'Male', 'Lond
 --- 8 SQL tund
 
 
+create nonclustered index IX_EmployeeCityFirstName_Salary
+on EmployeeCityFirstName (Salary asc)
+
+select * from EmployeeCityFirstName
+
+--- view
+
+create table EmployeeIndex
+(
+Id int primary key,
+Name nvarchar(20),
+Salary int,
+Gender nvarchar(20),
+DeptNameId int
+)
+
+insert into EmployeeIndex values(1, 'John', 5000, 'Male', 3)
+insert into EmployeeIndex values(2, 'Mike', 3400, 'Male', 2)
+insert into EmployeeIndex values(3, 'Pam', 6000, 'Female', 1)
+insert into EmployeeIndex values(4, 'Todd', 4800, 'Male', 4)
+insert into EmployeeIndex values(5, 'Sara', 3200, 'Female', 1)
+insert into EmployeeIndex values(6, 'Ben', 4800, 'Male', 3)
+
+select * from Department
+
+select EmployeeIndex.Id, Name, Salary, Gender, DepartmentName
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+
+--- loome view, kus kasutame joini
+create view vEmployeesByDepartmentIndex
+as
+select EmployeeIndex.Id, Name, Salary, Gender, DepartmentName
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+
+--- view, kus kasutame joini
+select * from vEmployeesByDepartmentIndex
+-- view on salvestatud virtuaalne tabel
+
+
+--- view eelised
+-- 1. saab kasutada andmebaasi skeemi keerukuse lihtsustamiseks, mitte IT inimestele
+-- 2. saab kasutada rakendamise mehhanismina rea ja veerutaseme turvalisusena
+
+--- view, mis tagastab ainult IT osakonna töötajad
+create view vITDepartment_Employees
+as 
+select EmployeeIndex.Id, Name, Salary, Gender, DepartmentName
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+where Department.DepartmentName = 'IT'
+
+select * from vITDepartment_Employees
+
+--- piirame palga nägemist kolmandatel isikutel
+-- veerru turvalisus e kus jäetakse mingi veerg välja
+create view vEmployeesDataExceptSalary
+as
+select EmployeeIndex.Id, Name, Gender, DepartmentName
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+
+
+select * from vEmployeesDataExceptSalary
+
+--- view, kus saab kasutada ainult koondandmete näitamiseks
+-- view, mis tagastab summeeritud andmeid
+create view vEmployeesCountByDepartment
+as
+select DepartmentName, COUNT(EmployeeIndex.Id) as TotalEmployees
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+group by DepartmentName
+
+select * from vEmployeesCountByDepartment
+
+--- kuidas vaadata view sisu
+sp_helptext vEmployeesCountByDepartment
+
+--- kui soovid view-d muuta, siis paned: alter view
+--- kui soovid kustutada, siis: drop view
+
+
+--- view uuendused
+select * from vEmployeesDataExceptSalary
+
+--- kuidas läbi view uuendada andmeid
+update vEmployeesDataExceptSalary
+set FirstName = 'Mikey' where Id = '2'
+
+--- kustutamise jaoks
+delete from vEmployeesDataExceptSalary where Id = 2
+
+-- andmete sisestamine
+insert into vEmployeesDataExceptSalary values(11, 'Mikey', 'Male', 2)
+
+--- muudame läbi view kaks veergu korraga
+create view vEmployeeDetailsByDepartmentIndex
+as
+select EmployeeIndex.Id, Name, Salary, Gender, DepartmentName
+from EmployeeIndex
+join Department
+on EmployeeIndex.DeptNameId = Department.Id
+
+select * from vEmployeeDetailsByDepartmentIndex
+update vEmployeeDetailsByDepartmentIndex
+set DepartmentName = 'HR' where Name = 'John'
+
+---indekseeritud view
+
+create table Product
+(
+Id int primary key,
+Name nvarchar(20),
+UnitPrice int
+)
+
+insert into Product values(1, 'Books', 20)
+insert into Product values(2, 'Pens', 14)
+insert into Product values(3, 'Pencils', 11)
+insert into Product values(4, 'Clips', 10)
+
+create table ProductSales
+(
+Id int,
+QuantitySold int
+)
+
+create view vTotalSalesByProduct
+with schemabinding  -- seob käsitletavaid tabeleid ja ei luba muuta igatepidi
+as
+select Name,
+SUM(ISNULL((QuantitySold * UnitPrice), 0)) as TotalSales,
+count_big(*) as TotalTransactions
+from dbo.ProductSales
+join dbo.Product --kindlasti panna tabeli ette dbo
+on Product.Id = ProductSales.Id
+group by Name
+
+select * from vTotalSalesByProduct
+
+--- view reeglid
+-- 1. view tuleb luua koos schemabinding
+-- 2. kui lisafunktsioon select list viitab väljendile ja 
+-- selle tulemuseks võib olla NULL, siis asendusväärtus peaks olema 
+-- täpsustatud e antud juhul nr 0 tuleb lahtrisse
+
+-- loome Indeksi view sisse
+create unique clustered index UIX_vTotalSalesByProduct_Name
+on vTotalSalesByProduct(Name)
+
+select * from UIX_vTotalSalesByProduct_Name
+
+-- view piirangud
+
+create view vEmployeeDetails
+@Gender nvarchar(20)
+as
+select Id, Name, Gender, DeptNameId
+from EmployeeIndex
+where Gender = @Gender
+-- parameetreid ei saa sisestada view-sse
+
+-- funktsiooni saab panna parameetreid
+create function fnEmployeeDetails(@Gender nvarchar(20))
+returns table
+as return
+(Select Id, Name, Gender, DeptNameId
+from EmployeeIndex where Gender = @Gender)
+
+select * from dbo.fnEmployeeDetails('Male')
+
+---
+create view vEmployeeDetailsSorted
+as
+select Id, Name, Gender, DeptNameId
+from EmployeeIndex
+order by Id
+
+-- order by-d ei saa kasutada views
+create table ##TestTempTable(Id int, Name nvarchar(20), Gender nvarchar(10))
+
+create table ##TestTempTable values(105, 'Martin', 'Male')
+create table ##TestTempTable values(106, 'Joe', 'Female')
+create table ##TestTempTable values(107, 'Pam', 'Female')
+create table ##TestTempTable values(108, 'James', 'Male')
+
+create view vOnTempTable
+as
+select Id, Name, Gender
+from ##TestTempTable
+-- view koos TempTablega ei saa teha
+
+-- view piirangud 42
+
+--- 9 tund SQL
