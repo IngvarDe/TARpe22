@@ -1634,6 +1634,29 @@ where Id = 4
 select * from EmployeeTrigger
 select * from EmployeeAudit
 
+
+create table Department
+(
+Id int primary key,
+DeptName nvarchar(20)
+)
+
+insert into Department values(1, 'IT')
+insert into Department values(2, 'Payroll')
+insert into Department values(3, 'HR')
+insert into Department values(4, 'Admin')
+
+
+-- enne triggeri tegemist tuleb teha vaade
+create view vEmployeeDetails
+as
+select EmployeeTrigger.Id, Name, Gender, DeptName
+from EmployeeTrigger
+join Department
+on EmployeeTrigger.DepartmentId = Department.Id
+
+
+
 ---- instead of insert trigger
 create trigger trEmployeeDetailsInsteadOfInsert
 on vEmployeeDetails
@@ -1641,7 +1664,7 @@ instead of insert
 as begin
 	declare @DeptId int
 
-	select @DeptId = DeptId
+	select @DeptId = Department.Id
 	from Department 
 	join inserted
 	on inserted.DeptName = Department.DeptName
@@ -1656,7 +1679,97 @@ as begin
 	select Id, Name, Gender, @DeptId
 	from inserted
 end
+--- raiserror funktsioon
+-- selle eesmärk on välja tuua veateade, kui DepartmentName veerus ei ole väärtust
+-- ja ei ühti sisestatud väärtusega
+-- esimene parameeter on veateate sisu, teiene on veatase (nr 16 tähendab üldiseid vigu),
+-- kolmas on veaolek
 
---- harjutus 45 instead of triggeri juures jäime pooleli
+insert into vEmployeeDetails values(7, 'Valarie', 'Female', 'assd')
 
+delete from EmployeeTrigger where Id = 7
 --- 10 tund SQL
+select * from EmployeeTrigger
+select * from vEmployeeDetails
+
+
+update vEmployeeDetails
+set DeptName = 'Payroll'
+where Id = 2
+
+--- teeme vaate
+alter view vEmployeeDetailsUpdate
+as
+select EmployeeTrigger.Id, Name, Salary, Gender, DeptName
+from EmployeeTrigger
+join Department
+on EmployeeTrigger.DepartmentId = Department.Id
+
+select * from vEmployeeDetailsUpdate
+update EmployeeTrigger set DepartmentId = 4
+where Id = 4
+
+--- loome triggeri
+alter trigger trEmployeeDetailsInsteadOfUpdate
+on vEmployeeDetailsUpdate
+instead of update
+as begin
+	if(update(Id))
+	begin
+		raiserror('Id cannot be changed', 16, 1)
+		return
+	end
+
+	if(UPDATE(DeptName))
+	begin
+		declare @DeptId int
+		select @DeptId = Department.Id
+		from Department
+		join inserted
+		on inserted.DeptName = Department.DeptName
+
+		if(@DeptId is null)
+		begin
+			raiserror('Invalid Department Name', 16, 1)
+			return
+		end
+
+		update EmployeeTrigger set DepartmentId = @DeptId
+		from inserted
+		join EmployeeTrigger
+		on EmployeeTrigger.Id = inserted.Id
+	end
+
+	if(update(Gender))
+	begin
+		update EmployeeTrigger set Gender = inserted.Gender
+		from inserted
+		join EmployeeTrigger
+		on EmployeeTrigger.Id = inserted.Id
+	end
+
+	if(UPDATE(Name))
+	begin
+		update EmployeeTrigger set Name = inserted.Name
+		from inserted
+		join EmployeeTrigger
+		on EmployeeTrigger.Id = inserted.Id
+	end
+
+	if(UPDATE(Salary))
+	begin
+		update EmployeeTrigger set Salary = inserted.Salary
+		from inserted
+		join EmployeeTrigger
+		on EmployeeTrigger.Id = inserted.Id
+	end
+end
+
+select * from EmployeeTrigger
+
+update vEmployeeDetailsUpdate
+set Name = 'Johny', Gender = 'Female', DeptName = 'IT'
+where Id = 1
+
+-- harjutus 47
+-- 11 tund SQL
