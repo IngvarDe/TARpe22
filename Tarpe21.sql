@@ -1773,3 +1773,256 @@ where Id = 1
 
 -- harjutus 47
 -- 11 tund SQL
+
+--- delete trigger
+
+create trigger trEmployeeDetails_InsteadOfDelete
+on vEmployeeDetails
+instead of delete
+as begin
+	delete EmployeeTrigger
+	from EmployeeTrigger
+	join deleted
+	on EmployeeTrigger.Id = deleted.Id
+end
+
+delete from vEmployeeDetails where Id = 2
+--- kui seda triggerit ei oleks, siis annaks veateate
+
+
+--- päritud tabelid ja CTE
+--- CTE - common table expression 
+
+select * from EmployeeTrigger
+select * from Department
+
+-- kasutame view-d
+create view vEmployeeCount
+as
+select DepartmentId, DeptName, COUNT(*) as TotalEmployees
+from EmployeeTrigger
+join Department
+on EmployeeTrigger.DepartmentId = Department.Id
+group by DeptName, DepartmentId
+go
+select * from vEmployeeCount
+-- saate vaadata Id järgi, et kui palju inimesi konkreetses osakonnas töötab
+select DeptName, TotalEmployees
+from vEmployeeCount
+where TotalEmployees >= 2
+
+--- temp table
+select DeptName, DepartmentId, COUNT(*) as TotalEmployees
+into #TempEmployeeCount
+from EmployeeTrigger
+join Department
+on EmployeeTrigger.DepartmentId = Department.Id
+group by DeptName, DepartmentId
+
+--- päring
+select DeptName, TotalEmployees
+from  #TempEmployeeCount
+where TotalEmployees >= 2
+
+--- kasutame kahte tabeli muutujat
+declare @EmployeeCount table
+(DeptName nvarchar(20), DepartmentId int, TotalEmployees int)
+insert @EmployeeCount
+select DeptName, DepartmentId, COUNT(*) as TotalEmployees
+from EmployeeTrigger
+join Department
+on EmployeeTrigger.DepartmentId = Department.Id
+group by DeptName, DepartmentId
+
+--- päring
+select DeptName, TotalEmployees
+from @EmployeeCount
+where TotalEmployees >= 2
+
+
+--- sisemine päring e subquerie
+select DeptName, TotalEmployees
+from
+( -- kui on sulgude sees, siis on tegemist subqueriga
+	select DeptName, DepartmentId, COUNT(*) as TotalEmployees
+	from EmployeeTrigger
+	join Department
+	on EmployeeTrigger.DepartmentId = Department.Id
+	group by DeptName, DepartmentId
+)
+as EmployeeCount
+where TotalEmployees >= 2
+
+
+--- kasutame CTE-d
+with EmployeeCount(DeptName, DepartmentId, TotalEmployees)
+as
+	(
+	select DeptName, DepartmentId, COUNT(*) as TotalEmployees
+	from EmployeeTrigger
+	join Department
+	on EmployeeTrigger.DepartmentId = Department.Id
+	group by DeptName, DepartmentId
+	)
+select DeptName, TotalEmployees
+from EmployeeCount
+where TotalEmployees >= 2
+
+
+--- CTE serveris
+
+-- with algussõnaga määratletakse ära CTE päring
+with EmployeeCount(DepartmentId, TotalEmployees)
+as
+(
+	select DepartmentId, COUNT(*) as TotalEmployees
+	from EmployeeTrigger
+	group by DepartmentId
+)
+select DeptName, TotalEmployees
+from Department
+join EmployeeCount
+on Department.Id = EmployeeCount.DepartmentId
+order by TotalEmployees
+
+--- sulgudes määratletakse ära CTE moodustavad veerud
+--- NB! CTE-le saab viidata ainult käskudega SELECT, INSERT, UPDATE või DELETE
+--- ja see peab järgnema kohe peale CTE-d.
+
+with EmployeeCount(DepartmentId, TotalEmployees)
+as
+(
+	select DepartmentId, COUNT(*) as TotalEmployees
+	from EmployeeTrigger
+	group by DepartmentId
+)
+select 'Hello' --- see osa on vale
+select DeptName, TotalEmployees
+from Department
+join EmployeeCount
+on Department.Id = EmployeeCount.DepartmentId
+order by TotalEmployees
+
+--- kasutame mitu CTE-d korraga
+with EmployeeCountBy_Payroll_It_Dept(DeptName, Total)
+as 
+(
+	select DeptName, COUNT(EmployeeTrigger.Id) as TotalEmployees
+	from EmployeeTrigger
+	join Department
+	on EmployeeTrigger.DepartmentId = Department.Id
+	where DeptName in ('Payroll', 'IT')
+	group by DeptName
+), --- nüüd tuleb teine CTE ja eraldame need komaga
+EmployeesCountBy_HR_Admin_Dept(DeptName, Total)
+as
+(
+	select DeptName, COUNT(EmployeeTrigger.Id) as TotalEmployees
+	from EmployeeTrigger
+	join Department
+	on EmployeeTrigger.DepartmentId = Department.Id
+	group by DeptName
+)
+select * from EmployeeCountBy_Payroll_It_Dept
+union -- läbi unioni ühendad kaks CTE-d ära
+select * from EmployeesCountBy_HR_Admin_Dept
+
+--- CTE update
+
+--- loome lihtsa CTE
+with Employees_Name_Gender
+as
+(
+select Id, Name, Gender from EmployeeTrigger
+)
+select * from Employees_Name_Gender
+
+--- teeme update CTE
+with Employees_Name_Gender
+as
+(
+select Id, Name, Gender from EmployeeTrigger
+)
+update Employees_Name_Gender set Gender = 'Male' where Id = 1
+
+--- CTE, mis mõjutab kahe tabeli andmeid korraga
+with EmployeesByDepartment
+as
+(
+	select EmployeeTrigger.Id, Name, Gender, DeptName
+	from EmployeeTrigger
+	join Department
+	on Department.Id = EmployeeTrigger.DepartmentId
+)
+select * from EmployeesByDepartment
+
+--- ainult ühes tabelis tahtsime andmeid muuta
+with EmployeesByDepartment
+as
+(
+	select EmployeeTrigger.Id, Name, Gender, DeptName
+	from EmployeeTrigger
+	join Department
+	on Department.Id = EmployeeTrigger.DepartmentId
+)
+update EmployeesByDepartment set Gender = 'asd' where Id = 1
+
+--- kahes tabelis korraga ei saa andmeid muuta läbi CTE
+with EmployeesByDepartment
+as
+(
+	select EmployeeTrigger.Id, Name, Gender, DeptName
+	from EmployeeTrigger
+	join Department
+	on Department.Id = EmployeeTrigger.DepartmentId
+)
+update EmployeesByDepartment set Gender = 'asd123', DeptName = 'IT' where Id = 1
+
+-- muudame DeptName
+with EmployeesByDepartment
+as
+(
+	select EmployeeTrigger.Id, Name, Gender, DeptName
+	from EmployeeTrigger
+	join Department
+	on Department.Id = EmployeeTrigger.DepartmentId
+)
+update EmployeesByDepartment set DeptName = 'HR' where Id = 1
+--- enne oli enamus töötajaid IT osakonnas, aga peale seda koodi,
+--- muutsime ära Department tabelis oleva IT osakonna nime HR peale e 
+--- nüüd on kaks HR osakonda
+
+--- kokkuvõte:
+-- 1. kui CTE baseerub ühel tabelil, siis uuendus töötab korralikult
+-- 2. kui CTE baseerub mitmel tabelil ja uuendus mõjutab mitut tabelit, siis tuleb viga
+-- 3. kui CTE baseerub mitmel tabelil ja uuendus mõjutab ühte tabelit, siis viga ei tule
+-- uuendus saab tehtud, aga mitte alati oodatud tulemusega
+
+
+--- CTE kordumine
+-- kui CTE viitab iseendale
+
+-- kuidas teha tabeli sisu tühjaks???
+truncate table EmployeeTrigger
+select * from EmployeeTrigger
+
+insert into EmployeeTrigger values(1, 'Tom', 2)
+insert into EmployeeTrigger values(2, 'Josh', NULL)
+insert into EmployeeTrigger values(3, 'Mike', 2)
+insert into EmployeeTrigger values(4, 'John', 3)
+insert into EmployeeTrigger values(5, 'Pam', 1)
+insert into EmployeeTrigger values(6, 'Mary', 3)
+insert into EmployeeTrigger values(7, 'James', 1)
+insert into EmployeeTrigger values(8, 'Sam', 5)
+insert into EmployeeTrigger values(9, 'Simon', 1)
+
+
+--- self join päringu
+select Employee.Name as [Employee Name],
+ISNULL(Manager.Name, 'Super Boss') as [Manager Name]
+from EmployeeTrigger Employee
+left join EmployeeTrigger Manager
+on Employee.ManagerId = Manager.Id
+
+-- harjutus 51 CTE
+--- 12 SQL tund
