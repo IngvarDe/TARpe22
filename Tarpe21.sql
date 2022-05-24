@@ -2026,3 +2026,32 @@ on Employee.ManagerId = Manager.Id
 
 -- harjutus 51 CTE
 --- 12 SQL tund
+
+select * from EmployeeTrigger
+go;
+
+with EmployeeCTE (Id, Name, ManagerId, [Level])
+as
+	(
+	select Id, Name, ManagerId, 1
+	from EmployeeTrigger
+	where ManagerId is null
+
+	union all
+
+	select EmployeeTrigger.Id, EmployeeTrigger.Name,
+	EmployeeTrigger.ManagerId, EmployeeCTE.[Level] + 1
+	from EmployeeTrigger
+	join EmployeeCTE
+	on EmployeeTrigger.ManagerId = EmployeeCTE.Id
+	)
+select EmpCTE.Name as Employee, isnull(MgrCTE.Name, 'Super Boss') as Manager,
+EmpCTE.[Level]
+from EmployeeCTE EmpCTE
+left join EmployeeCTE MgrCTE
+on EmpCTE.ManagerId = MgrCTE.Id
+
+--- harjutus 51 läbi võetud
+-- 13 SQL tund
+
+
