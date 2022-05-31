@@ -2413,3 +2413,91 @@ begin
 end
 
 --- 14 SQL tund
+
+select * from ProductSales
+select * from Product
+
+--- saame sellise info, kus vähemalt ühe korra on toodet müüdud
+--- subquerie 
+select Id, Name, Description
+from Product
+where Id in
+(
+	select ProductId from ProductSales
+)
+
+--- vahemälu puhastamine
+checkpoint;
+
+dbcc DROPCLEANBUFFERS; -- tühejandab päringu vahemälu
+
+dbcc FREEPROCCACHE; -- puhastab täitmise plaani vahemälu
+
+
+--- kasutame joini päringu tegemisel
+select distinct Product.Id Name, Description
+from Product
+inner join ProductSales
+on Product.Id = ProductSales.ProductId
+
+--- JOIN päringul on parem jõudlus
+
+select Id, Name, Description
+from Product
+where not exists(select * from ProductSales 
+				 where ProductId = Product.Id)
+-- teeme vahemälu puhtaks
+
+select Product.Id, Name, Description
+from Product
+left join ProductSales
+on Product.Id = ProductSales.ProductId
+where ProductSales.ProductId is null
+
+
+--- curosorid
+-- SETS: see lubab mitut päringut kombineerida üheks tulemuseks
+update ProductSales set UnitPrice = 50 where ProductId = 101
+
+--- kui on vaja rea kaupa andmeid töödelda, siis kõige parem
+--- variant on Cursor. Sama on need jõudlusele halvad ja 
+--- võimalusel vältida. Soovitav oleks selle asemel kasutada JOIN-i
+
+-- Cursorid jagunevad omakorda:
+-- 1. Forward-only e edasi ainult
+-- 2. Static e staatilised
+-- 3. Keyset e võtmetele seadistatud
+-- 4. Dynamic e dünaamiline
+
+-- oletame, et tahame muuta UnitPrice veerus olevaid andmeid
+declare @ProductId int
+declare ProductIdCursor cursor for
+select ProductId from ProductSales
+
+open ProductIdCursor
+
+fetch next from ProductIdCursor into @ProductId
+
+while(@@FETCH_STATUS = 0)
+	begin
+		declare @ProductName nvarchar(50)
+		select @ProductName = name for Product where Id = @ProductId
+
+		if(@ProductName = 'Product - 55')
+		begin
+			update ProductSales set UnitPrice = 55 where ProductId = @ProductId
+		end
+
+		if(@ProductName = 'Product - 65')
+		begin
+			update ProductSales set UnitPrice = 65 where ProductId = @ProductId
+		end
+
+		if(@ProductName = 'Product - 1000')
+		begin
+			update ProductSales set UnitPrice = 1000 where ProductId = @ProductId
+		end
+
+
+
+
