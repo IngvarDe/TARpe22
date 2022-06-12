@@ -2481,7 +2481,7 @@ fetch next from ProductIdCursor into @ProductId
 while(@@FETCH_STATUS = 0)
 	begin
 		declare @ProductName nvarchar(50)
-		select @ProductName = name for Product where Id = @ProductId
+		select @ProductName = Name from dbo.Product where Id = @ProductId
 
 		if(@ProductName = 'Product - 55')
 		begin
@@ -2497,7 +2497,18 @@ while(@@FETCH_STATUS = 0)
 		begin
 			update ProductSales set UnitPrice = 1000 where ProductId = @ProductId
 		end
+	fetch next from ProductIdCursor into @ProductId
+end
+
+close ProductIdCursor
+deallocate ProductIdCursor
 
 
+select Id, Name, UnitPrice
+from Product join
+ProductSales on Product.Id = ProductSales.ProductId
+where (Name='Product - 55' or Name='Product - 65' 
+	   or Name like 'Product - 1000')
 
+-- 15 SQL tund
 
